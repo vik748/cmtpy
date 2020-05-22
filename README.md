@@ -7,7 +7,9 @@ Tools for manipulating image contrast
 ## Citing
 
 If you use this software in an academic work, please cite in addition to the original author's paper:
-```@online{cmtpy, author = {Vikrant Shah},
+```
+@online{shah,
+  author = {Vikrant Shah},
   title = {{cmtpy} Contrast Manipulation Toolbox},
   year = 2020,
   url = {https://github.com/vik748/cmtpy},
@@ -23,4 +25,3 @@ This tool implements the algorithm described in [Grundland, Mark & Dodgson, Neil
 
 
 ## How to use
-
