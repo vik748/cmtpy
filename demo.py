@@ -12,4 +12,4 @@ data_path = os.path.dirname(os.path.relpath(data.__file__))
 gr = cv2.imread(os.path.join('test_data','histogram_warping_test_image.png'),
                   cv2.IMREAD_GRAYSCALE)
 
-gr1_warped = histogram_warping_ace(gr, lam = 5, no_bits = 8, plot_histograms=False)
+gr_warped = histogram_warping_ace(gr, lam = 5, no_bits = 8, plot_histograms=False)

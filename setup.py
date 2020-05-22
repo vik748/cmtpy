@@ -12,6 +12,7 @@ setup(
     keywords=["contrast", "histogram", "enhancement"],
     classifiers=[],
     install_requires=[
-        'scipy'
+        'scipy',
+        'numpy'
     ],
 )
