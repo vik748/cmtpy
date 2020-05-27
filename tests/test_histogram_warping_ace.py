@@ -16,26 +16,33 @@ from cmtpy.histogram_warping_ace import histogram_warping_ace
 class TestHistogramWarpingACE(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.gr = cv2.imread(os.path.join('test_data','histogram_warping_test_image.png'),
-                            cv2.IMREAD_GRAYSCALE)
-        assert cls.gr is not None, "Couldn't read image"
+        raw_images = ['museum_raw.png', 'mountain_raw.jpg', 'sunset_raw.jpg']
+
+        cls.gr_list = []
+        for raw_name in raw_images:
+            gr_raw_name = os.path.join('test_data', raw_name)
+            gr_img = cv2.imread(gr_raw_name, cv2.IMREAD_GRAYSCALE)
+            assert gr_img is not None, "Couldn't read image"
+            cls.gr_list.append(gr_img)
 
     def setup(self):
-        self.gr = cls.gr
+        self.gr_list = cls.gr_list
 
     def test_histogram_warping(self):
         """
         Test the warping without plotting
         """
-        gr_warped = histogram_warping_ace(self.gr, lam = 5, no_bits = 8, plot_histograms=False)
-        self.assertEqual(gr_warped.shape, self.gr.shape, "Return image size incorrect")
+        for gr in self.gr_list:
+            gr_warped = histogram_warping_ace(gr, lam = 5, no_bits = 8, plot_histograms=False)
+            self.assertEqual(gr_warped.shape, gr.shape, "Return image size incorrect")
 
     def test_histogram_warping_plots(self):
         """
-        Test the zernike detector max feature response
+        Test the warping with plotting
         """
-        gr_warped = histogram_warping_ace(self.gr, lam = 5, no_bits = 8, plot_histograms=True)
-        self.assertTrue(1, "Unable to plot histograms")
+        for gr in self.gr_list:
+            gr_warped = histogram_warping_ace(gr, lam = 5, no_bits = 8, plot_histograms=False)
+            self.assertEqual(gr_warped.shape, gr.shape, "Return image size incorrect")
 
 if __name__ == '__main__':
     unittest.main()
