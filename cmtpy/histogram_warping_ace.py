@@ -11,6 +11,12 @@ import scipy.stats as st
 from scipy.signal import argrelmin
 from scipy import interpolate as interp
 from scipy import integrate
+try:
+    import cv2
+    opencv_available = True
+except ModuleNotFoundError as e:
+    print("Opencv Not avialable using 0 order hold for resizing: {}".format(e))
+    opencv_available = False
 
 def gen_F_inverse(F,x_d, delta = 1e-4):
     '''
@@ -59,16 +65,44 @@ def get_Transform(a,b,d,x):
                            bounds_error = False,
                            fill_value = ( np.min(T_x), np.max(T_x) ) )
 
-def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False):
+def calc_scale_factor(orig_size):
+    orig_size_arr = np.array(orig_size)
+    scale_found = False
+    scale_factor = 0
+    while not scale_found:
+        scale_factor += 1
+        new_size = orig_size_arr / scale_factor
+        if np.max(new_size) < 1000:
+            remainders = new_size % scale_factor
+            scale_found = remainders[0] == 0 and remainders[1] == 0
+    return int(scale_factor)
+
+def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
+                          tau = 0.01, stretch = False, downsample_for_kde = True, debug = False):
+
+    if gr.ndim > 2:
+        raise ValueError("Number of dims > 2, image might not be grayscale")
+
+    if downsample_for_kde and np.max(gr.shape) > 1000:
+        sc_fac = calc_scale_factor(gr.shape)
+        if debug: print("Scale factor = ", sc_fac)
+        if opencv_available:
+            gr_sc = cv2.resize(gr, (0,0), fx=1/sc_fac, fy=1/sc_fac, interpolation=cv2.INTER_AREA)
+        else:
+            gr_sc = gr[::sc_fac,::sc_fac]
+    else:
+        gr_sc = gr
+
     no_bits = 8
     no_gray_levels = 2 ** no_bits
 
     x = np.linspace(0,1, no_gray_levels)
     x_img = gr.flatten() / (no_gray_levels - 1)
+    x_img_sc = gr_sc.flatten() / (no_gray_levels - 1)
 
     #h = 0.7816774 * st.iqr(x_img) * ( len(x_img) ** (-1/7) )
     #h = 0.7816774 * ( Finv_interp(0.75) - Finv_interp(0.25) ) * ( len(x_img) ** (-1/7) )
-    x_kde_full = st.gaussian_kde(x_img,bw_method='silverman')
+    x_kde_full = st.gaussian_kde(x_img_sc, bw_method='silverman')
     x_kde = x_kde_full(x)
 
     f = x_kde
@@ -80,7 +114,8 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False):
     Finv_interp = gen_F_inverse(F,x, delta = 1e-4)
 
     valleys = x[argrelmin(f)[0]]
-    v_k = np.concatenate( (np.array([0]), valleys,np.array([1]) ) )
+    #v_k = np.concatenate( (np.array([0]), valleys,np.array([1]) ) )
+    v_k = np.concatenate( ( Finv_interp([0]), valleys, Finv_interp([1]) ) )
     a_k = (v_k[0:-1] + v_k[1:])/2
 
 
@@ -90,23 +125,54 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False):
             (F_interp(a_k) - F_interp(vk1)) * vk  ) / \
           (  F_interp(vk)  - F_interp(vk1) )
 
+    a_k_full = np.concatenate( ( Finv_interp([0]), a_k, Finv_interp([1]) ) )
+    b_k_full = np.concatenate( ( np.array([0]), b_k, np.array([1]) ) )
+    if debug:
+        print("a_k_full_unscaled: ",a_k_full)
+        print("b_k_full_unscaled: ",b_k_full)
+
+    if stretch:
+        # Stretch and scale ranges
+        a_k_full_scaled = np.copy(a_k_full)
+        a_k_full_scaled[1] = Finv_interp(tau)
+        a_k_full_scaled[-2] = Finv_interp(1-tau)
+        #a_k_full_scaled[2:-2] =  a_k_full_scaled[1] + (a_k_full[2:-2] - a_k_full[1]) / \
+        #                                              (a_k_full[-2] - a_k_full[1]) * \
+        #                                              (a_k_full_scaled[-2] - a_k_full_scaled[1])
+
+        b_k_full_scaled = np.copy(b_k_full)
+        b_k_full_scaled[1] = tau
+        b_k_full_scaled[-2] = 1-tau
+        b_k_full_scaled[2:-2] =  b_k_full_scaled[1] + (b_k_full[2:-2] - b_k_full[1]) / \
+                                                      (b_k_full[-2] - b_k_full[1]) * \
+                                                      (b_k_full_scaled[-2] - b_k_full_scaled[1])
+
+        a_k_full_unscaled = a_k_full
+        b_k_full_unscaled = b_k_full
+        a_k_full = a_k_full_scaled
+        b_k_full = b_k_full_scaled
+
+        if debug:
+            print("a_k_full_scaled: ", a_k_full)
+            print("b_k_full_scaled: ", b_k_full)
 
     # Calculate dk
-    a_k_full = np.concatenate( ( Finv_interp([0]), a_k, Finv_interp([1]) ) )
+    a_k = a_k_full[1:-1]
     a_k_plus_1 = a_k_full[2:]
     a_k_minus_1 = a_k_full[0:-2]
 
     a_k_plus = Finv_interp((F_interp(a_k) + F_interp(a_k_plus_1))/2)    #.astype(int)
     a_k_minus = Finv_interp((F_interp(a_k) + F_interp(a_k_minus_1))/2)  #.astype(int)
 
-    b_k_full = np.concatenate( (np.array([0]), b_k, np.array([1]) ) )
+    b_k = b_k_full[1:-1]
     b_k_plus_1 = b_k_full[2:]
     b_k_minus_1 = b_k_full[0:-2]
 
-    b_k_plus = ( b_k + b_k_plus_1 ) / 2
+    b_k_plus =  ( b_k + b_k_plus_1  ) / 2
     b_k_minus = ( b_k + b_k_minus_1 ) / 2
 
     exp_denom = F_interp(a_k_plus_1) - F_interp(a_k_minus_1)
+    if debug: print("exp_denom: ",exp_denom)
 
     first_term = ( (b_k - b_k_minus) / (a_k - a_k_minus) ) ** \
                  ( ( F_interp(a_k) - F_interp(a_k_minus_1) ) / exp_denom )
@@ -117,22 +183,24 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False):
     d_k = first_term * second_term
 
     b_0_plus = ( b_k_full[0] + b_k_full[1] ) / 2
-    a_0_plus = Finv_interp( ( F_interp(a_k_full[0]) + F_interp(a_k_full[1]) )/2 )
+    a_0_plus = Finv_interp( ( F_interp(a_k_full[0]) + F_interp(a_k_full[1]) ) /2 )
     d_0 = b_0_plus / a_0_plus
 
-    b_K_plus_1_minus = ( b_k_full[-1] - b_k_full[-2] ) / 2
-    a_K_plus_1_minus = Finv_interp( ( F_interp(a_k_full[-1]) - F_interp(a_k_full[-2]) )/2 )
+    b_K_plus_1_minus = ( b_k_full[-1] + b_k_full[-2] ) / 2
+    a_K_plus_1_minus = Finv_interp( ( F_interp(a_k_full[-1]) + F_interp(a_k_full[-2]) )/2 )
     d_K_plus_1 = ( 1 - b_K_plus_1_minus ) / ( 1 - a_K_plus_1_minus )
 
-    d_k_full = np.concatenate( (np.array([d_0]), b_k, np.array([d_K_plus_1]) ) )
+    d_k_full = np.concatenate( (np.array([d_0]), d_k, np.array([d_K_plus_1]) ) )
+    if debug: print("d_k_full before threshold: ",d_k_full)
 
-    d_k_full[d_k_full < 1/lam] = lam
+    d_k_full[d_k_full < 1/lam] = 1/lam
     d_k_full[d_k_full > lam]
+    if debug: print("d_k_full after threshold: ",d_k_full)
 
     T_x_interp = get_Transform(a_k_full, b_k_full, d_k_full, x)
 
     x_img_adj = T_x_interp(x_img)
-    gr_warp = np.round(x_img_adj * (no_gray_levels - 1)).astype(int).reshape(gr.shape)
+    gr_warp = np.round(x_img_adj * (no_gray_levels - 1)).astype(np.uint8).reshape(gr.shape)
 
 
     if plot_histograms:
@@ -155,7 +223,19 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False):
             raise SystemExit('Error: {}.\nUnable to import matplotlib, \
                               cannot display histograms'.format(e))
 
-        x_adj_kde_full = st.gaussian_kde(x_img_adj, bw_method=x_kde_full.silverman_factor())
+        if downsample_for_kde and np.max(gr_warp.shape) > 1000:
+            sc_fac = calc_scale_factor(gr_warp.shape)
+            if debug: print("Scale factor = ", sc_fac)
+            if opencv_available:
+                gr_warp_sc = cv2.resize(gr_warp, (0,0), fx=1/sc_fac, fy=1/sc_fac, interpolation=cv2.INTER_AREA)
+            else:
+                gr_warp_sc = gr_warp[::sc_fac,::sc_fac]
+        else:
+            gr_warp_sc = gr_warp
+
+
+        x_img_adj_sc = gr_warp_sc.flatten() / (no_gray_levels - 1)
+        x_adj_kde_full = st.gaussian_kde(x_img_adj_sc, bw_method=x_kde_full.silverman_factor())
         x__adj_kde = x_adj_kde_full(x)
 
         f_adj = x__adj_kde
@@ -225,5 +305,8 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False):
         x_coord_lines(a_k, F_interp(a_k), ax=axes[2,1], labels='a_', color='g')
         y_coord_lines(a_k, F_interp(a_k), ax=axes[2,1], labels='Fa_', color='g')
         x_coord_lines(b_k, F_interp(a_k), ax=axes[2,1], labels='b_',color='b')
+
+        plt.figure()
+        plt.plot(x, T_x_interp(x),'.')
 
     return gr_warp

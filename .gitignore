@@ -1,3 +1,4 @@
 build
 cmtpy.egg-info
 dist
+cmtpy/__pycache__
