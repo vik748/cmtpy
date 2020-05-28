@@ -35,34 +35,40 @@ def plot_img_histograms(gr, axes, title=""):
 def compare_single_img(gr_raw_name, gr_bm_name):
     gr_raw = cv2.imread(gr_raw_name, cv2.IMREAD_GRAYSCALE)
     gr_bm = cv2.imread(gr_bm_name, cv2.IMREAD_GRAYSCALE)
-    plt.figure()
-    plt.plot(gr_raw.flatten(), gr_bm.flatten(),'.',ms='.5')
 
-    gr_warp = histogram_warping_ace(gr_raw, lam = 5, no_bits = 8, tau = 0.01,
-                                    plot_histograms=True, stretch=True, debug=False)
+    gr_warp, Tx = histogram_warping_ace(gr_raw, lam = 5, no_bits = 8, tau = 0.01,
+                                    plot_histograms=False, stretch=False, debug=True,
+                                    reduce_contrast = True, return_Tx = True)
 
     fig = plt.figure(constrained_layout=True)
-    gs = fig.add_gridspec(4, 3)
-    axes = np.empty((3,3),dtype=object)
+    gs = fig.add_gridspec(5, 3)
+    axes = np.empty((4,3),dtype=object)
     axes[0,0] = fig.add_subplot(gs[0:2,0])
     axes[1,0] = fig.add_subplot(gs[2,0])
     axes[2,0] = fig.add_subplot(gs[3,0], sharex = axes[1,0])
 
-    axes[0,1] = fig.add_subplot(gs[0:2,1])
-    axes[1,1] = fig.add_subplot(gs[2,1], sharey = axes[1,0])
+    axes[0,1] = fig.add_subplot(gs[0:2,1], sharex = axes[0,0], sharey=axes[0,0])
+    axes[1,1] = fig.add_subplot(gs[2,1], sharex = axes[1,0], sharey = axes[1,0])
     axes[2,1] = fig.add_subplot(gs[3,1], sharex = axes[1,1], sharey = axes[2,0])
+    axes[3,1] = fig.add_subplot(gs[4,1])
 
     axes[0,2] = fig.add_subplot(gs[0:2,2])
-    axes[1,2] = fig.add_subplot(gs[2,2], sharey = axes[1,0])
+    axes[1,2] = fig.add_subplot(gs[2,2], sharex = axes[1,0], sharey = axes[1,0])
     axes[2,2] = fig.add_subplot(gs[3,2], sharex = axes[1,2], sharey = axes[2,0])
+    axes[3,2] = fig.add_subplot(gs[4,2], sharex = axes[3,1], sharey = axes[3,0])
+
 
     [axi.set_axis_off() for axi in axes[0,:].ravel()]
-    [plt.setp(a.get_xticklabels(), visible=False) for a in axes[1:2,:].ravel()]
+    [plt.setp(a.get_xticklabels(), visible=False) for a in axes[1:3,:].ravel()]
     [plt.setp(a.get_yticklabels(), visible=False) for a in axes[1:,1:].ravel()]
 
     plot_img_histograms(gr_raw, axes[:,0], title="Raw")
     plot_img_histograms(gr_warp, axes[:,1], title="cmtpy")
     plot_img_histograms(gr_bm, axes[:,2], title="Paper")
+
+    axes[3,2].plot(gr_raw.flatten(), gr_bm.flatten(),'.',ms=.5)
+    x = np.linspace(0,1, 256)
+    axes[3,1].plot(x*255,Tx(x)*255,'.', ms=0.5)
 
 plt.close('all')
 

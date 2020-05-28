@@ -78,7 +78,8 @@ def calc_scale_factor(orig_size):
     return int(scale_factor)
 
 def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
-                          tau = 0.01, stretch = False, downsample_for_kde = True, debug = False):
+                          tau = 0.01, stretch = True, downsample_for_kde = True,
+                          debug = False,  reduce_contrast = False, return_Tx = False):
 
     if gr.ndim > 2:
         raise ValueError("Number of dims > 2, image might not be grayscale")
@@ -121,31 +122,34 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
 
     vk = v_k[1:]
     vk1 = v_k[0:-1]
-    b_k = ( (F_interp(vk)  - F_interp(a_k)) * vk1 +
-            (F_interp(a_k) - F_interp(vk1)) * vk  ) / \
-          (  F_interp(vk)  - F_interp(vk1) )
 
-    a_k_full = np.concatenate( ( Finv_interp([0]), a_k, Finv_interp([1]) ) )
-    b_k_full = np.concatenate( ( np.array([0]), b_k, np.array([1]) ) )
-    if debug:
-        print("a_k_full_unscaled: ",a_k_full)
-        print("b_k_full_unscaled: ",b_k_full)
+    if not reduce_contrast:
+        b_k = ( (F_interp(vk)  - F_interp(a_k)) * vk1 +
+                (F_interp(a_k) - F_interp(vk1)) * vk  ) / \
+              (  F_interp(vk)  - F_interp(vk1) )
+    else:
+        b_k = ( (F_interp(a_k) - F_interp(vk1)) * vk1 +
+                (F_interp(vk)  - F_interp(a_k)) * vk    ) / \
+              (  F_interp(vk)  - F_interp(vk1) )
+
 
     if stretch:
         # Stretch and scale ranges
+        a_k_full = np.concatenate( ( Finv_interp([0, tau]), a_k, Finv_interp([1-tau, 1]) ) )
         a_k_full_scaled = np.copy(a_k_full)
-        a_k_full_scaled[1] = Finv_interp(tau)
-        a_k_full_scaled[-2] = Finv_interp(1-tau)
+        #a_k_full_scaled[1] = Finv_interp(tau)
+        #a_k_full_scaled[-2] = Finv_interp(1-tau)
         #a_k_full_scaled[2:-2] =  a_k_full_scaled[1] + (a_k_full[2:-2] - a_k_full[1]) / \
         #                                              (a_k_full[-2] - a_k_full[1]) * \
         #                                              (a_k_full_scaled[-2] - a_k_full_scaled[1])
 
+        b_k_full = np.concatenate( ( np.array([0, tau]), b_k, np.array([1-tau, 1]) ) )
         b_k_full_scaled = np.copy(b_k_full)
-        b_k_full_scaled[1] = tau
-        b_k_full_scaled[-2] = 1-tau
-        b_k_full_scaled[2:-2] =  b_k_full_scaled[1] + (b_k_full[2:-2] - b_k_full[1]) / \
-                                                      (b_k_full[-2] - b_k_full[1]) * \
-                                                      (b_k_full_scaled[-2] - b_k_full_scaled[1])
+        #b_k_full_scaled[1] = tau
+        # b_k_full_scaled[-2] = 1-tau
+        stretch_factor = (b_k_full_scaled[-2] - b_k_full_scaled[1]) / \
+                         (a_k_full_scaled[-2] - a_k_full_scaled[1])
+        b_k_full_scaled[2:-2] =  b_k_full_scaled[1] + (b_k_full[2:-2] - b_k_full_scaled[1]) * stretch_factor
 
         a_k_full_unscaled = a_k_full
         b_k_full_unscaled = b_k_full
@@ -153,8 +157,18 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
         b_k_full = b_k_full_scaled
 
         if debug:
+            np.set_printoptions(precision=4)
+            print("a_k_full_unscaled: ",a_k_full_unscaled)
             print("a_k_full_scaled: ", a_k_full)
+            print("b_k_full_unscaled: ",b_k_full_unscaled)
             print("b_k_full_scaled: ", b_k_full)
+
+    else:
+        a_k_full = np.concatenate( ( Finv_interp([0]), a_k, Finv_interp([1]) ) )
+        b_k_full = np.concatenate( ( Finv_interp([0]), b_k, Finv_interp([1]) ) )
+        if debug:
+            print("a_k_full_unscaled: ", a_k_full)
+            print("b_k_full_unscaled: ", b_k_full)
 
     # Calculate dk
     a_k = a_k_full[1:-1]
@@ -236,9 +250,9 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
 
         x_img_adj_sc = gr_warp_sc.flatten() / (no_gray_levels - 1)
         x_adj_kde_full = st.gaussian_kde(x_img_adj_sc, bw_method=x_kde_full.silverman_factor())
-        x__adj_kde = x_adj_kde_full(x)
+        x_adj_kde = x_adj_kde_full(x)
 
-        f_adj = x__adj_kde
+        f_adj = x_adj_kde
         F_adj = np.cumsum(f_adj)
         F_adj = np.concatenate((np.array([0]), integrate.cumtrapz(f_adj, x)))
 
@@ -306,7 +320,7 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
         y_coord_lines(a_k, F_interp(a_k), ax=axes[2,1], labels='Fa_', color='g')
         x_coord_lines(b_k, F_interp(a_k), ax=axes[2,1], labels='b_',color='b')
 
-        plt.figure()
-        plt.plot(x, T_x_interp(x),'.')
-
-    return gr_warp
+    if return_Tx:
+        return gr_warp, T_x_interp
+    else:
+        return gr_warp
