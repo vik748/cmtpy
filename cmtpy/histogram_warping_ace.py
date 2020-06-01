@@ -8,7 +8,7 @@ histogra_warping
 import numpy as np
 import sys, os
 import scipy.stats as st
-from scipy.signal import argrelmin
+from scipy.signal import argrelmin, argrelmax
 from scipy import interpolate as interp
 from scipy import integrate
 try:
@@ -17,6 +17,33 @@ try:
 except ModuleNotFoundError as e:
     print("Opencv Not avialable using 0 order hold for resizing: {}".format(e))
     opencv_available = False
+
+def make_increasing(arr):
+    indx, = np.where(arr[:-1] > arr[1:])
+    arr[indx] = arr[indx + 1] - np.finfo(float).eps
+    return arr
+
+def get_valleys(x, f, threshold_ratio = 0.01):
+    minimas, = argrelmin(f)
+    maximas, = argrelmax(f)
+    assert len(maximas) <= len(minimas)+1
+
+    if (maximas[0] < minimas[0]): maximas=maximas[1:]
+    if (maximas[-1] > minimas[-1]): maximas=maximas[:-1]
+    assert len(minimas) == len(maximas)+1
+
+    min_dist_from_maxima = np.minimum(f[maximas] - f[minimas[0:-1]], f[maximas] - f[minimas[1:]])
+    threshold = threshold_ratio * np.max(min_dist_from_maxima)
+
+    bad_maxima_indx, = np.where(min_dist_from_maxima<threshold)
+    for idx in bad_maxima_indx:
+        np.subtract(bad_maxima_indx,1,out = bad_maxima_indx) # to account for removed elements
+        if f[minimas[idx]] <= f[minimas[idx+1]]:
+            minimas = np.delete(minimas, idx+1)
+        else:
+            minimas = np.delete(minimas, idx)
+
+    return minimas
 
 def gen_F_inverse(F,x_d, delta = 1e-4):
     '''
@@ -94,7 +121,6 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
     else:
         gr_sc = gr
 
-    no_bits = 8
     no_gray_levels = 2 ** no_bits
 
     x = np.linspace(0,1, no_gray_levels)
@@ -114,9 +140,14 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
     F_interp = interp.interp1d(x, F)
     Finv_interp = gen_F_inverse(F,x, delta = 1e-4)
 
-    valleys = x[argrelmin(f)[0]]
+    #valleys = x[argrelmin(f, order=5)[0]]
+    valleys = x[get_valleys(x, f, threshold_ratio = 0.01)]
     #v_k = np.concatenate( (np.array([0]), valleys,np.array([1]) ) )
-    v_k = np.concatenate( ( Finv_interp([0]), valleys, Finv_interp([1]) ) )
+    v_k = np.concatenate( ( Finv_interp([tau]), valleys, Finv_interp([1-tau]) ) )
+    if debug:
+        print("v_k = np.{}".format(v_k.__repr__()))
+        print("f_interp(v_k) = np.{}".format(f_interp(v_k).__repr__()))
+
     a_k = (v_k[0:-1] + v_k[1:])/2
 
 
@@ -143,13 +174,17 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
         #                                              (a_k_full[-2] - a_k_full[1]) * \
         #                                              (a_k_full_scaled[-2] - a_k_full_scaled[1])
 
-        b_k_full = np.concatenate( ( np.array([0, tau]), b_k, np.array([1-tau, 1]) ) )
+        b_k_full = np.concatenate( ( np.array([0]), Finv_interp([tau]), b_k, Finv_interp([1-tau]), np.array([1]) ) )
+        b_k_full = make_increasing(b_k_full)
+
         b_k_full_scaled = np.copy(b_k_full)
-        #b_k_full_scaled[1] = tau
-        # b_k_full_scaled[-2] = 1-tau
+        b_k_full_scaled[1] = tau
+        b_k_full_scaled[-2] = 1-tau
+
         stretch_factor = (b_k_full_scaled[-2] - b_k_full_scaled[1]) / \
-                         (a_k_full_scaled[-2] - a_k_full_scaled[1])
-        b_k_full_scaled[2:-2] =  b_k_full_scaled[1] + (b_k_full[2:-2] - b_k_full_scaled[1]) * stretch_factor
+                         (b_k_full[-2] - b_k_full[1])
+        b_k_full_scaled[2:-2] =  b_k_full_scaled[1] + (b_k_full[2:-2] - b_k_full[1]) * stretch_factor
+
 
         a_k_full_unscaled = a_k_full
         b_k_full_unscaled = b_k_full
@@ -158,17 +193,23 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
 
         if debug:
             np.set_printoptions(precision=4)
-            print("a_k_full_unscaled: ",a_k_full_unscaled)
-            print("a_k_full_scaled: ", a_k_full)
-            print("b_k_full_unscaled: ",b_k_full_unscaled)
-            print("b_k_full_scaled: ", b_k_full)
+            print("a_k_full_unscaled = np.{}".format(a_k_full_unscaled.__repr__()))
+            print("a_k_full = np.{}".format(a_k_full.__repr__()))
+            print("b_k_full_unscaled = np.{}".format(b_k_full_unscaled.__repr__()))
+            print("b_k_full = np.{}".format(b_k_full.__repr__()))
 
     else:
         a_k_full = np.concatenate( ( Finv_interp([0]), a_k, Finv_interp([1]) ) )
         b_k_full = np.concatenate( ( Finv_interp([0]), b_k, Finv_interp([1]) ) )
         if debug:
-            print("a_k_full_unscaled: ", a_k_full)
-            print("b_k_full_unscaled: ", b_k_full)
+            print("a_k_full = np.",a_k_full.__repr__())
+            print("b_k_full = np.",b_k_full.__repr__())
+
+    strictly_increasing = lambda a: np.all(a[:-1] < a[1:])
+    increasing = lambda a: np.all(a[:-1] <= a[1:])
+
+    assert strictly_increasing(a_k_full)
+    assert increasing(b_k_full)
 
     # Calculate dk
     a_k = a_k_full[1:-1]

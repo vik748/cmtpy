@@ -13,6 +13,14 @@ import sys, os
 from matplotlib import pyplot as plt
 import scipy.stats as st
 
+def show_plot(fig=None):
+    if fig is None:
+        fig = plt.gcf()
+
+    #plt.show()
+    plt.pause(0.1)
+    fig.canvas.manager.window.activateWindow()
+    fig.canvas.manager.window.raise_()
 
 def plot_img_histograms(gr, axes, title=""):
     axes[0].imshow(gr,cmap='gray', vmin=0, vmax=255)
@@ -37,8 +45,8 @@ def compare_single_img(gr_raw_name, gr_bm_name):
     gr_bm = cv2.imread(gr_bm_name, cv2.IMREAD_GRAYSCALE)
 
     gr_warp, Tx = histogram_warping_ace(gr_raw, lam = 5, no_bits = 8, tau = 0.01,
-                                    plot_histograms=False, stretch=False, debug=True,
-                                    reduce_contrast = True, return_Tx = True)
+                                    plot_histograms=True, stretch=True, debug=False,
+                                    reduce_contrast = False, return_Tx = True)
 
     fig = plt.figure(constrained_layout=True)
     gs = fig.add_gridspec(5, 3)
@@ -69,6 +77,7 @@ def compare_single_img(gr_raw_name, gr_bm_name):
     axes[3,2].plot(gr_raw.flatten(), gr_bm.flatten(),'.',ms=.5)
     x = np.linspace(0,1, 256)
     axes[3,1].plot(x*255,Tx(x)*255,'.', ms=0.5)
+    show_plot(fig)
 
 plt.close('all')
 
@@ -81,3 +90,6 @@ for raw_name in raw_images:
     gr_bm_name = os.path.join(data_path, raw_name.replace('raw','histogram_warped'))
 
     compare_single_img(gr_raw_name, gr_bm_name)
+
+plt.show()
+
