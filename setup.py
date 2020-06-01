@@ -30,6 +30,6 @@ setup(
     ],
     install_requires=[
         'scipy',
-        'numpy'
+        'numpy',
     ],
 )
