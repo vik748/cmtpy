@@ -106,7 +106,8 @@ def calc_scale_factor(orig_size):
 
 def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
                           tau = 0.01, stretch = True, downsample_for_kde = True,
-                          debug = False,  reduce_contrast = False, return_Tx = False):
+                          debug = False,  adjustment_factor = 1.0, return_Tx = False):
+    assert -1 <= adjustment_factor <= 1
 
     if gr.ndim > 2:
         raise ValueError("Number of dims > 2, image might not be grayscale")
@@ -154,15 +155,16 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
     vk = v_k[1:]
     vk1 = v_k[0:-1]
 
-    if not reduce_contrast:
-        b_k = ( (F_interp(vk)  - F_interp(a_k)) * vk1 +
+    if adjustment_factor >=0 :
+        b_k_max = ( (F_interp(vk)  - F_interp(a_k)) * vk1 +
                 (F_interp(a_k) - F_interp(vk1)) * vk  ) / \
               (  F_interp(vk)  - F_interp(vk1) )
     else:
-        b_k = ( (F_interp(a_k) - F_interp(vk1)) * vk1 +
+        b_k_max = ( (F_interp(a_k) - F_interp(vk1)) * vk1 +
                 (F_interp(vk)  - F_interp(a_k)) * vk    ) / \
               (  F_interp(vk)  - F_interp(vk1) )
 
+    b_k = a_k + np.abs(adjustment_factor) * (b_k_max - a_k)
 
     if stretch:
         # Stretch and scale ranges
@@ -202,8 +204,8 @@ def histogram_warping_ace(gr, lam = 5.0, no_bits = 8, plot_histograms=False,
         a_k_full = np.concatenate( ( Finv_interp([0]), a_k, Finv_interp([1]) ) )
         b_k_full = np.concatenate( ( Finv_interp([0]), b_k, Finv_interp([1]) ) )
         if debug:
-            print("a_k_full = np.",a_k_full.__repr__())
-            print("b_k_full = np.",b_k_full.__repr__())
+            print("a_k_full = np.{}".format(a_k_full.__repr__()))
+            print("b_k_full = np()".format(b_k_full.__repr__()))
 
     strictly_increasing = lambda a: np.all(a[:-1] < a[1:])
     increasing = lambda a: np.all(a[:-1] <= a[1:])

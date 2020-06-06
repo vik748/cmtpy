@@ -46,7 +46,7 @@ def compare_single_img(gr_raw_name, gr_bm_name):
 
     gr_warp, Tx = histogram_warping_ace(gr_raw, lam = 5, no_bits = 8, tau = 0.01,
                                     plot_histograms=True, stretch=True, debug=False,
-                                    reduce_contrast = False, return_Tx = True)
+                                    adjustment_factor = 1.0, return_Tx = True)
 
     fig = plt.figure(constrained_layout=True)
     gs = fig.add_gridspec(5, 3)
