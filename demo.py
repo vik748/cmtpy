@@ -5,7 +5,7 @@ Created on Thu May 21 23:10:35 2020
 
 @author: vik748
 """
-from cmtpy.histogram_warping_ace import histogram_warping_ace
+from cmtpy.histogram_warping_ace import HistogramWarpingACE
 import cv2
 import time
 import numpy as np
@@ -44,9 +44,8 @@ def compare_single_img(gr_raw_name, gr_bm_name):
     gr_raw = cv2.imread(gr_raw_name, cv2.IMREAD_GRAYSCALE)
     gr_bm = cv2.imread(gr_bm_name, cv2.IMREAD_GRAYSCALE)
 
-    gr_warp, Tx = histogram_warping_ace(gr_raw, lam = 5, no_bits = 8, tau = 0.01,
-                                    plot_histograms=True, stretch=True, debug=False,
-                                    adjustment_factor = 1.0, return_Tx = True)
+    ace_obj = HistogramWarpingACE(no_bits=8, tau=0.01, stretch=True, debug=True, plot_histograms=True)
+    gr_warp,Tx = ace_obj.apply(gr_raw, return_Tx=True)
 
     fig = plt.figure(constrained_layout=True)
     gs = fig.add_gridspec(5, 3)

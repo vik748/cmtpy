@@ -5,7 +5,7 @@ Created on Thu May 21 23:10:35 2020
 
 @author: vik748
 """
-from cmtpy.histogram_warping_ace import histogram_warping_ace
+from cmtpy.histogram_warping_ace import HistogramWarpingACE
 from cmtpy.global_contrast_factor import compute_global_contrast_factor
 from cmtpy.harris_responnse import plot_harris_eig_vals
 
@@ -31,10 +31,14 @@ def analyze_contrast(gr_name, graph_axes, iceberg_slice=np.s_[:,:], set_name=Non
     warped_images = np.empty((11),dtype=object)
     adjs = np.arange(-1,1.2,.2)
 
+    ace_obj = HistogramWarpingACE(no_bits=8, tau=0.01, stretch=False, debug=True, plot_histograms=False)
+    v_k, a_k = ace_obj.compute_vk_and_ak(gr)
+
+
     for i, adj in enumerate(adjs):
-        warped_images[i], _ = histogram_warping_ace(gr, lam = 5, no_bits = 8, tau = 0.01,
-                                                    plot_histograms=False, stretch=False, debug=False,
-                                                    return_Tx = True, adjustment_factor = adj)
+        print(i,adj)
+        outputs = ace_obj.compute_bk_and_dk(v_k, a_k, adjustment_factor=adj)
+        warped_images[i], Tx = ace_obj.transform_image(*outputs, gr)
 
     fig,axes = plt.subplots(2,5, sharex=True, sharey=True)
     [axi.set_axis_off() for axi in axes.ravel()]
