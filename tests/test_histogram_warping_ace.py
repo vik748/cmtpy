@@ -11,7 +11,7 @@ if os.path.dirname(os.path.realpath(__file__)) == os.getcwd():
     sys.path.insert(1, os.path.join(sys.path[0], '..'))
 import cv2
 import unittest
-from cmtpy.histogram_warping_ace import histogram_warping_ace
+from cmtpy.histogram_warping_ace import HistogramWarpingACE
 
 class TestHistogramWarpingACE(unittest.TestCase):
     @classmethod
@@ -32,16 +32,21 @@ class TestHistogramWarpingACE(unittest.TestCase):
         """
         Test the warping without plotting
         """
+        ace_obj = HistogramWarpingACE(no_bits=8, tau=0.01, lam=5, adjustment_factor=1.0, stretch_factor=1.0,
+                                      min_stretch_bits=4, downsample_for_kde=True,debug=False, plot_histograms=False)
+
         for gr in self.gr_list:
-            gr_warped = histogram_warping_ace(gr, lam = 5, no_bits = 8, plot_histograms=False)
+            gr_warped = ace_obj.apply((gr))
             self.assertEqual(gr_warped.shape, gr.shape, "Return image size incorrect")
 
     def test_histogram_warping_plots(self):
         """
         Test the warping with plotting
         """
+        ace_obj = HistogramWarpingACE(no_bits=8, tau=0.01, lam=5, adjustment_factor=1.0, stretch_factor=1.0,
+                                      min_stretch_bits=4, downsample_for_kde=True,debug=False, plot_histograms=True)
         for gr in self.gr_list:
-            gr_warped = histogram_warping_ace(gr, lam = 5, no_bits = 8, plot_histograms=False)
+            gr_warped = ace_obj.apply(gr)
             self.assertEqual(gr_warped.shape, gr.shape, "Return image size incorrect")
 
 if __name__ == '__main__':

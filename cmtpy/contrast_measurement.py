@@ -7,7 +7,6 @@ Created on Mon Jun  8 10:39:08 2020
 """
 #from cmtpy.histogram_warping_ace import HistogramWarpingACE
 import cv2
-import sys, os
 import numpy as np
 from matplotlib import pyplot as plt
 
