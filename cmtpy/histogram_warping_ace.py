@@ -25,14 +25,16 @@ except ImportError as e:
     matplotlib_available = False
 
 class HistogramWarpingACE:
-    def __init__(self,  no_bits=8, tau=0.01, lam=5, adjustment_factor=1.0, stretch=True,
-                 downsample_for_kde=True,debug=False, plot_histograms=False):
-        self.no_gray_levels = 2 ** no_bits
+    def __init__(self,  no_bits=8, tau=0.01, lam=5, adjustment_factor=1.0, stretch_factor=1.0,
+                 min_stretch_bits=4, downsample_for_kde=True,debug=False, plot_histograms=False):
+        self.no_bits = no_bits
+        self.no_gray_levels = 2 ** self.no_bits
         self.x = np.linspace(0,1, self.no_gray_levels)
         self.tau = tau
         self.lam = lam
         self.adjustment_factor = adjustment_factor
-        self.stretch = stretch
+        self.stretch_factor = stretch_factor
+        self.min_stretch_bits = min_stretch_bits
         self.downsample_for_kde = downsample_for_kde
         self.debug = debug
         self.plot_histograms = plot_histograms
@@ -242,11 +244,16 @@ class HistogramWarpingACE:
             HistogramWarpingACE.x_coord_lines(a_k, self.F_interp(a_k), ax=self.axes[2,0], labels='a_', color='g')
             HistogramWarpingACE.y_coord_lines(a_k, self.F_interp(a_k), ax=self.axes[2,0], labels='Fa_', color='g')
 
+
         return v_k, a_k
 
-    def compute_bk_and_dk(self, v_k, a_k, adjustment_factor=None):
+    def compute_bk_and_dk(self, v_k, a_k, adjustment_factor=None, stretch_factor=None):
         if adjustment_factor is None:
             adjustment_factor = self.adjustment_factor
+
+        if stretch_factor is None:
+            stretch_factor = self.stretch_factor
+
         vk = v_k[1:]
         vk1 = v_k[0:-1]
 
@@ -265,47 +272,57 @@ class HistogramWarpingACE:
             HistogramWarpingACE.x_coord_lines(b_k, self.f_interp(a_k), ax=self.axes[1,0], labels='b_', color='b')
             HistogramWarpingACE.x_coord_lines(b_k, self.F_interp(a_k), ax=self.axes[2,0], labels='b_', color='b')
 
+        # Stretch and scale ranges
+        a_k_full = np.concatenate( ( self.Finv_interp([0, self.tau]), a_k, self.Finv_interp([1-self.tau, 1]) ) )
+        a_k_full_scaled = np.copy(a_k_full)
 
-        if self.stretch:
-            # Stretch and scale ranges
-            a_k_full = np.concatenate( ( self.Finv_interp([0, self.tau]), a_k, self.Finv_interp([1-self.tau, 1]) ) )
-            a_k_full_scaled = np.copy(a_k_full)
-            #a_k_full_scaled[1] = self.Finv_interp(tau)
-            #a_k_full_scaled[-2] = self.Finv_interp(1-tau)
-            #a_k_full_scaled[2:-2] =  a_k_full_scaled[1] + (a_k_full[2:-2] - a_k_full[1]) / \
-            #                                              (a_k_full[-2] - a_k_full[1]) * \
-            #                                              (a_k_full_scaled[-2] - a_k_full_scaled[1])
+        b_k_full = np.concatenate( ( np.array([0]), self.Finv_interp([self.tau]), b_k, self.Finv_interp([1-self.tau]), np.array([1]) ) )
+        b_k_full = HistogramWarpingACE.make_increasing(b_k_full)
 
-            b_k_full = np.concatenate( ( np.array([0]), self.Finv_interp([self.tau]), b_k, self.Finv_interp([1-self.tau]), np.array([1]) ) )
-            b_k_full = HistogramWarpingACE.make_increasing(b_k_full)
+        b_k_full_scaled = np.copy(b_k_full)
 
-            b_k_full_scaled = np.copy(b_k_full)
-            b_k_full_scaled[1] = self.tau
-            b_k_full_scaled[-2] = 1-self.tau
+        if stretch_factor >= 0:
+            stretch_limits = (self.tau, 1-self.tau)
 
-            stretch_factor = (b_k_full_scaled[-2] - b_k_full_scaled[1]) / \
-                             (b_k_full[-2] - b_k_full[1])
-            b_k_full_scaled[2:-2] =  b_k_full_scaled[1] + (b_k_full[2:-2] - b_k_full[1]) * stretch_factor
+        else:
+            max_stretch_float = (2 ** self.min_stretch_bits) / (2 ** self.no_bits)
+            stretch_limits = (0.5-max_stretch_float, 0.5+max_stretch_float)
+            print(max_stretch_float)
+            print(stretch_limits)
+
+        #b_k_full_scaled[1] = self.tau
+        #b_k_full_scaled[-2] = 1-self.tau
+        b_k_full_scaled[1] = b_k_full[1] + (stretch_limits[0] - b_k_full[1]) * np.abs(stretch_factor)
+        b_k_full_scaled[-2] = b_k_full[-2] + (stretch_limits[1] - b_k_full[-2]) * np.abs(stretch_factor)
+        b_k_full_scaled[0] = b_k_full_scaled[1] - self.tau
+        b_k_full_scaled[-1] = b_k_full_scaled[-2] + self.tau
+        #print("b_k_full = np.{}".format(b_k_full_scaled.__repr__()))
 
 
-            a_k_full_unscaled = a_k_full
-            b_k_full_unscaled = b_k_full
-            a_k_full = a_k_full_scaled
-            b_k_full = b_k_full_scaled
+        stretch_ratio = (b_k_full_scaled[-2] - b_k_full_scaled[1]) / \
+                         (b_k_full[-2] - b_k_full[1])
+        b_k_full_scaled[2:-2] =  b_k_full_scaled[1] + (b_k_full[2:-2] - b_k_full[1]) * stretch_ratio
 
-            if self.debug:
-                np.set_printoptions(precision=4)
-                print("a_k_full_unscaled = np.{}".format(a_k_full_unscaled.__repr__()))
-                print("a_k_full = np.{}".format(a_k_full.__repr__()))
-                print("b_k_full_unscaled = np.{}".format(b_k_full_unscaled.__repr__()))
-                print("b_k_full = np.{}".format(b_k_full.__repr__()))
 
+        a_k_full_unscaled = a_k_full
+        b_k_full_unscaled = b_k_full
+        a_k_full = a_k_full_scaled
+        b_k_full = b_k_full_scaled
+
+        if self.debug:
+            np.set_printoptions(precision=4)
+            print("a_k_full_unscaled = np.{}".format(a_k_full_unscaled.__repr__()))
+            print("a_k_full = np.{}".format(a_k_full.__repr__()))
+            print("b_k_full_unscaled = np.{}".format(b_k_full_unscaled.__repr__()))
+            print("b_k_full = np.{}".format(b_k_full.__repr__()))
+        '''
         else:
             a_k_full = np.concatenate( ( self.Finv_interp([0]), a_k, self.Finv_interp([1]) ) )
             b_k_full = np.concatenate( ( self.Finv_interp([0]), b_k, self.Finv_interp([1]) ) )
             if self.debug:
                 print("a_k_full = np.{}".format(a_k_full.__repr__()))
                 print("b_k_full = np.{}".format(b_k_full.__repr__()))
+        '''
 
         strictly_increasing = lambda a: np.all(a[:-1] < a[1:])
         increasing = lambda a: np.all(a[:-1] <= a[1:])

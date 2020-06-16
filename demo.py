@@ -44,7 +44,7 @@ def compare_single_img(gr_raw_name, gr_bm_name):
     gr_raw = cv2.imread(gr_raw_name, cv2.IMREAD_GRAYSCALE)
     gr_bm = cv2.imread(gr_bm_name, cv2.IMREAD_GRAYSCALE)
 
-    ace_obj = HistogramWarpingACE(no_bits=8, tau=0.01, stretch=True, debug=True, plot_histograms=True)
+    ace_obj = HistogramWarpingACE(no_bits=8, tau=0.01, stretch_factor=1,adjustment_factor=1, debug=True, plot_histograms=True)
     gr_warp,Tx = ace_obj.apply(gr_raw, return_Tx=True)
 
     fig = plt.figure(constrained_layout=True)
