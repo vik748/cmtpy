@@ -1,5 +1,6 @@
 build
 cmtpy.egg-info
 dist
+results/
 **/__pycache__
 **/*.pyc

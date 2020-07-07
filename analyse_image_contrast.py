@@ -168,6 +168,8 @@ gr2_iceberg_slice = np.s_[130:280,:]
 gr_name = gr1_name
 gr_slice = gr1_iceberg_slice
 gr = read_grimage(gr_name, resize_scale = 1/5)
+set_name = 'Lars1 '
+
 
 contrast_estimators = {'Global Contrast Factor': lambda gr: cm.compute_global_contrast_factor(gr),
                        'RMS Contrast': lambda gr: cm.compute_rms_contrast(gr,debug=False),
@@ -206,9 +208,10 @@ for wimg, ax, adj in zip(warped_images, axes_imgs.ravel(), adjs):
 fig_plot,axes_plot = plt.subplots(2,3, sharex=True)
 fig_plot.suptitle(gr_name)
 
+
 for col, col_slice, ax, est in zip(contrast_estimates.T, contrast_estimates_slice.T, axes_plot.ravel(), contrast_estimators.keys()):
-    ax.plot(adjs, col, '.', label='Full')
-    ax.plot(adjs, col_slice, '.', label='Iceberg only')
+    ax.plot(adjs, col, '.', label=set_name+'Full')
+    ax.plot(adjs, col_slice, '.', label=set_name+'Iceberg only')
     ax.set_title(est)
     ax.set_xlabel("Adjustment/stretch factor")
     ax.set_ylabel("Calculated contrast")
@@ -217,6 +220,3 @@ for col, col_slice, ax, est in zip(contrast_estimates.T, contrast_estimates_slic
 
     #axes[i,j].imshow(warped_images[i,j], cmap='gray', vmin=0, vmax=255)
     #ax.set_title("Adj factor = {:.2f}".format(adj))
-
-
-

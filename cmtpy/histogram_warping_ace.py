@@ -287,8 +287,8 @@ class HistogramWarpingACE:
         else:
             max_stretch_float = (2 ** self.min_stretch_bits) / (2 ** self.no_bits)
             stretch_limits = (0.5-max_stretch_float, 0.5+max_stretch_float)
-            print(max_stretch_float)
-            print(stretch_limits)
+            #print(max_stretch_float)
+            if self.debug: print("Stretch limits: ", stretch_limits)
 
         #b_k_full_scaled[1] = self.tau
         #b_k_full_scaled[-2] = 1-self.tau
