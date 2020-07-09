@@ -204,6 +204,13 @@ class HistogramWarpingACE:
         valleys = self.x[HistogramWarpingACE.get_valleys(self.x, f, threshold_ratio = 0.01)]
         #v_k = np.concatenate( (np.array([0]), valleys,np.array([1]) ) )
         v_k = np.concatenate( ( self.Finv_interp([self.tau]), valleys, self.Finv_interp([1-self.tau]) ) )
+
+        # Remove v_1 if it is less than v_0
+        if v_k[1] <= v_k[0]: v_k = np.delete(v_k, 1)
+
+        # Remove v_k[-2] (second last element) if it is greater than the last element
+        if v_k[-2] >= v_k[-1]: v_k = np.delete(v_k, -2)
+
         if self.debug:
             print("v_k = np.{}".format(v_k.__repr__()))
             print("f_interp(v_k) = np.{}".format(self.f_interp(v_k).__repr__()))
