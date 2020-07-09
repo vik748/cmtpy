@@ -113,23 +113,25 @@ class HistogramWarpingACE:
     @staticmethod
     def get_valleys(x, f, threshold_ratio = 0.01):
         minimas, = argrelmin(f)
-        maximas, = argrelmax(f)
-        assert len(maximas) <= len(minimas)+1
+        if len(minimas) > 1:
+            maximas, = argrelmax(f)
+            assert len(maximas) <= len(minimas)+1
 
-        if (maximas[0] < minimas[0]): maximas=maximas[1:]
-        if (maximas[-1] > minimas[-1]): maximas=maximas[:-1]
-        assert len(minimas) == len(maximas)+1
+            # only keep maximas between the minimas
+            if (maximas[0] < minimas[0]): maximas=maximas[1:]
+            if (maximas[-1] > minimas[-1]): maximas=maximas[:-1]
+            assert len(minimas) == len(maximas)+1
 
-        min_dist_from_maxima = np.minimum(f[maximas] - f[minimas[0:-1]], f[maximas] - f[minimas[1:]])
-        threshold = threshold_ratio * np.max(min_dist_from_maxima)
+            min_dist_from_maxima = np.minimum(f[maximas] - f[minimas[0:-1]], f[maximas] - f[minimas[1:]])
+            threshold = threshold_ratio * np.max(min_dist_from_maxima)
 
-        bad_maxima_indx, = np.where(min_dist_from_maxima<threshold)
-        for idx in bad_maxima_indx:
-            np.subtract(bad_maxima_indx,1,out = bad_maxima_indx) # to account for removed elements
-            if f[minimas[idx]] <= f[minimas[idx+1]]:
-                minimas = np.delete(minimas, idx+1)
-            else:
-                minimas = np.delete(minimas, idx)
+            bad_maxima_indx, = np.where(min_dist_from_maxima<threshold)
+            for idx in bad_maxima_indx:
+                np.subtract(bad_maxima_indx,1,out = bad_maxima_indx) # to account for removed elements
+                if f[minimas[idx]] <= f[minimas[idx+1]]:
+                    minimas = np.delete(minimas, idx+1)
+                else:
+                    minimas = np.delete(minimas, idx)
 
         return minimas
 
