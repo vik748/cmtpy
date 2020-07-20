@@ -80,10 +80,10 @@ def compute_global_contrast_factor(img):
         avg_contrast_scale = compute_image_average_contrast(im_scale)
         gcf += wi * avg_contrast_scale
 
-    return gcf
+    return gcf, None
 
 
-def compute_rms_contrast(gr, no_bits=8, debug=False):
+def compute_rms_contrast(gr, mask=None, no_bits=8, debug=False):
     '''
     Convert image to float and compute its Root Mean Square contrast as the
     standard deviation of intensities
@@ -110,7 +110,13 @@ def compute_rms_contrast(gr, no_bits=8, debug=False):
     levels = 2 ** no_bits - 1
     gr_float = gr / levels
     if debug:
-        gr_filt = np.mean(gr_float)*np.ones_like(gr_float)
+        if not mask is None:
+            gr_float_plot = gr_float * mask
+            gr_filt_plot = np.mean(gr_float[mask])*mask
+        else:
+            gr_float_plot = gr_float
+            gr_filt_plot = np.mean(gr_float)*np.ones_like(gr_float)
+
         fig, axes = plt.subplots(1,3, sharex=True, sharey=True)
         ax_imgs = np.empty((13),dtype=object)
         axes[0].set_title('Raw')
@@ -118,16 +124,19 @@ def compute_rms_contrast(gr, no_bits=8, debug=False):
         axes[2].set_title('Diff')
         [axi.set_axis_off() for axi in axes.ravel()]
 
-        ax_imgs[0] = axes[0].imshow(gr_float, cmap='gray',vmin=0, vmax=1)
-        ax_imgs[1] = axes[1].imshow(gr_filt, cmap='gray',vmin=0, vmax=1)
-        ax_imgs[2] = axes[2].imshow(np.abs(gr_float - gr_filt), cmap='gray')
+        ax_imgs[0] = axes[0].imshow(gr_float_plot, cmap='gray',vmin=0, vmax=1)        
+        ax_imgs[1] = axes[1].imshow(gr_filt_plot, cmap='gray',vmin=0, vmax=1)
+        ax_imgs[2] = axes[2].imshow(np.abs(gr_float_plot - gr_filt_plot), cmap='gray')
         fig.subplots_adjust(left=0.025, bottom=0.025, right=0.99, top=.9, wspace=0.00, hspace=0.00)
         [fig.colorbar(ax_img, ax=ax, orientation='horizontal',pad=0.05, shrink=0.9) for ax_img, ax in zip(ax_imgs, axes)]
+        
+    if not mask is None:
+        return np.std(gr_float), np.std(gr_float[mask])
+    else:
+        return np.std(gr_float), None
 
-    return np.std(gr_float)
 
-
-def compute_box_filt_contrast(gr, kernel_size=11, no_bits=8, debug=False):
+def compute_box_filt_contrast(gr, mask=None, kernel_size=11, no_bits=8, debug=False):
     '''
     Convert image to float and compute its RMS local contrast using a box filtered image
 
@@ -151,6 +160,8 @@ def compute_box_filt_contrast(gr, kernel_size=11, no_bits=8, debug=False):
         raise ValueError("Provided image gr is not uint8")
     if gr.ndim != 2:
         raise ValueError("Provided image gr is not grayscale")
+    if not mask is None and mask.dtype is not np.dtype('bool'):
+        raise ValueError("Provided mask in not bool")
 
     if kernel_size % 2 == 0:
         raise ValueError ("Kernel size must be an odd integer")
@@ -166,10 +177,21 @@ def compute_box_filt_contrast(gr, kernel_size=11, no_bits=8, debug=False):
 
     gr_float_cropped = gr_float[ignore_border_width : -ignore_border_width, ignore_border_width : -ignore_border_width]
     gr_filt_cropped = gr_filt[ignore_border_width : -ignore_border_width, ignore_border_width : -ignore_border_width]
-
+    if not mask is None:
+            mask_cropped = mask[ignore_border_width : -ignore_border_width, ignore_border_width : -ignore_border_width]
+            diff_masked = gr_float_cropped[mask_cropped] - gr_filt_cropped[mask_cropped]
+            contrast_masked = np.sum(diff_masked ** 2) / np.sum(mask_cropped)
+            
     contrast = np.sum( (gr_float_cropped - gr_filt_cropped)**2 ) / ( gr_float_cropped.shape[0] * gr_float_cropped.shape[1] )
 
     if debug:
+        if not mask is None:
+            gr_float_plot = gr_float * mask
+            gr_filt_plot = gr_filt * mask
+        else:
+            gr_float_plot = gr_float
+            gr_filt_plot = gr_filt
+            
         fig, axes = plt.subplots(1,3, sharex=True, sharey=True)
         ax_imgs = np.empty((13),dtype=object)
         axes[0].set_title('Raw')
@@ -177,15 +199,18 @@ def compute_box_filt_contrast(gr, kernel_size=11, no_bits=8, debug=False):
         axes[2].set_title('Diff')
         [axi.set_axis_off() for axi in axes.ravel()]
 
-        ax_imgs[0] = axes[0].imshow(gr_float, cmap='gray',vmin=0, vmax=1)
-        ax_imgs[1] = axes[1].imshow(gr_filt, cmap='gray',vmin=0, vmax=1)
-        ax_imgs[2] = axes[2].imshow(np.abs(gr_float - gr_filt), cmap='gray')
+        ax_imgs[0] = axes[0].imshow(gr_float_plot, cmap='gray',vmin=0, vmax=1)
+        ax_imgs[1] = axes[1].imshow(gr_filt_plot, cmap='gray',vmin=0, vmax=1)
+        ax_imgs[2] = axes[2].imshow(np.abs(gr_float_plot - gr_filt_plot), cmap='gray')
         fig.subplots_adjust(left=0.025, bottom=0.025, right=0.99, top=.9, wspace=0.00, hspace=0.00)
         [fig.colorbar(ax_img, ax=ax, orientation='horizontal',pad=0.05, shrink=0.9) for ax_img, ax in zip(ax_imgs, axes)]
 
-    return contrast
+    if not mask is None:
+        return contrast, contrast_masked
+    else:
+        return contrast, None
 
-def compute_gaussian_filt_contrast(gr, sigma=1.0, kernel_size=0, no_bits=8, debug=False):
+def compute_gaussian_filt_contrast(gr, mask=None, sigma=1.0, kernel_size=0, no_bits=8, debug=False):
     '''
     Convert image to float and compute its RMS local contrast using a gaussian filtered image
 
@@ -213,6 +238,8 @@ def compute_gaussian_filt_contrast(gr, sigma=1.0, kernel_size=0, no_bits=8, debu
         raise ValueError("Provided image gr is not uint8")
     if gr.ndim != 2:
         raise ValueError("Provided image gr is not grayscale")
+    if not mask is None and mask.dtype is not np.dtype('bool'):
+        raise ValueError("Provided mask in not bool")
 
     if kernel_size == 0:
         kernel_size = int(np.round(sigma * 4 * 2 + 1))
@@ -231,10 +258,21 @@ def compute_gaussian_filt_contrast(gr, sigma=1.0, kernel_size=0, no_bits=8, debu
 
     gr_float_cropped = gr_float[ignore_border_width : -ignore_border_width, ignore_border_width : -ignore_border_width]
     gr_filt_cropped = gr_filt[ignore_border_width : -ignore_border_width, ignore_border_width : -ignore_border_width]
+    if not mask is None:
+        mask_cropped = mask[ignore_border_width : -ignore_border_width, ignore_border_width : -ignore_border_width]
+        diff_masked = gr_float_cropped[mask_cropped] - gr_filt_cropped[mask_cropped]
+        contrast_masked = np.sum(diff_masked ** 2) / np.sum(mask_cropped)
 
     contrast = np.sum( (gr_float_cropped - gr_filt_cropped)**2 ) / ( gr_float_cropped.shape[0] * gr_float_cropped.shape[1] )
 
     if debug:
+        if not mask is None:
+            gr_float_plot = gr_float * mask
+            gr_filt_plot = gr_filt * mask
+        else:
+            gr_float_plot = gr_float
+            gr_filt_plot = gr_filt
+
         print("Kernel size: {}".format(kernel_size))
         fig, axes = plt.subplots(1,3, sharex=True, sharey=True)
         ax_imgs = np.empty((13),dtype=object)
@@ -243,15 +281,18 @@ def compute_gaussian_filt_contrast(gr, sigma=1.0, kernel_size=0, no_bits=8, debu
         axes[2].set_title('Diff')
         [axi.set_axis_off() for axi in axes.ravel()]
 
-        ax_imgs[0] = axes[0].imshow(gr_float, cmap='gray',vmin=0, vmax=1)
-        ax_imgs[1] = axes[1].imshow(gr_filt, cmap='gray',vmin=0, vmax=1)
-        ax_imgs[2] = axes[2].imshow(np.abs(gr_float - gr_filt), cmap='gray')
+        ax_imgs[0] = axes[0].imshow(gr_float_plot, cmap='gray',vmin=0, vmax=1)
+        ax_imgs[1] = axes[1].imshow(gr_filt_plot, cmap='gray',vmin=0, vmax=1)
+        ax_imgs[2] = axes[2].imshow(np.abs(gr_float_plot - gr_filt_plot), cmap='gray')
         fig.subplots_adjust(left=0.025, bottom=0.025, right=0.99, top=.9, wspace=0.00, hspace=0.00)
         [fig.colorbar(ax_img, ax=ax, orientation='horizontal',pad=0.05, shrink=0.9) for ax_img, ax in zip(ax_imgs, axes)]
 
-    return contrast
+    if not mask is None:
+        return contrast, contrast_masked
+    else:
+        return contrast, None
 
-def compute_bilateral_filt_contrast(gr, sigmaSpace=1.0, sigmaColor=0.1, kernel_size=0, no_bits=8, debug=False):
+def compute_bilateral_filt_contrast(gr, mask=None, sigmaSpace=1.0, sigmaColor=0.1, kernel_size=0, no_bits=8, debug=False):
     '''
     Convert image to float and compute its RMS local contrast using a bilateral filtered image
 
@@ -280,6 +321,9 @@ def compute_bilateral_filt_contrast(gr, sigmaSpace=1.0, sigmaColor=0.1, kernel_s
         raise ValueError("Provided image gr is not uint8")
     if gr.ndim != 2:
         raise ValueError("Provided image gr is not grayscale")
+    if not mask is None and mask.dtype is not np.dtype('bool'):
+        raise ValueError("Provided mask in not bool")
+
 
     if kernel_size == 0:
         kernel_size = int(np.round(sigmaSpace * 4 * 2 + 1))
@@ -297,10 +341,23 @@ def compute_bilateral_filt_contrast(gr, sigmaSpace=1.0, sigmaColor=0.1, kernel_s
 
     gr_float_cropped = gr_float[ignore_border_width : -ignore_border_width, ignore_border_width : -ignore_border_width]
     gr_filt_cropped = gr_filt[ignore_border_width : -ignore_border_width, ignore_border_width : -ignore_border_width]
+    
+    if not mask is None:
+        mask_cropped = mask[ignore_border_width : -ignore_border_width, ignore_border_width : -ignore_border_width]
+        diff_masked = gr_float_cropped[mask_cropped] - gr_filt_cropped[mask_cropped]
+        contrast_masked = np.sum(diff_masked ** 2) / np.sum(mask_cropped)
 
     contrast = np.sum( (gr_float_cropped - gr_filt_cropped)**2 ) / ( gr_float_cropped.shape[0] * gr_float_cropped.shape[1] )
 
     if debug:
+        if not mask is None:
+            gr_float_plot = gr_float * mask
+            gr_filt_plot = gr_filt * mask
+        else:
+            gr_float_plot = gr_float
+            gr_filt_plot = gr_filt
+
+        
         fig, axes = plt.subplots(1,3, sharex=True, sharey=True)
         ax_imgs = np.empty((13),dtype=object)
         axes[0].set_title('Raw')
@@ -308,10 +365,13 @@ def compute_bilateral_filt_contrast(gr, sigmaSpace=1.0, sigmaColor=0.1, kernel_s
         axes[2].set_title('Diff')
         [axi.set_axis_off() for axi in axes.ravel()]
 
-        ax_imgs[0] = axes[0].imshow(gr_float, cmap='gray',vmin=0, vmax=1)
-        ax_imgs[1] = axes[1].imshow(gr_filt, cmap='gray',vmin=0, vmax=1)
-        ax_imgs[2] = axes[2].imshow(np.abs(gr_float - gr_filt), cmap='gray')
+        ax_imgs[0] = axes[0].imshow(gr_float_plot, cmap='gray',vmin=0, vmax=1)
+        ax_imgs[1] = axes[1].imshow(gr_filt_plot, cmap='gray',vmin=0, vmax=1)
+        ax_imgs[2] = axes[2].imshow(np.abs(gr_float_plot - gr_filt_plot), cmap='gray')
         fig.subplots_adjust(left=0.025, bottom=0.025, right=0.99, top=.9, wspace=0.00, hspace=0.00)
         [fig.colorbar(ax_img, ax=ax, orientation='horizontal',pad=0.05, shrink=0.9) for ax_img, ax in zip(ax_imgs, axes)]
 
-    return contrast
+    if not mask is None:
+        return contrast, contrast_masked
+    else:
+        return contrast, None
